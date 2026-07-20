@@ -21,10 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
-COPY checkpoints/ ./checkpoints/
+COPY models/ ./models/
 
-# Hugging Face Spaces expects the app on port 7860. Render/other platforms
-# typically inject their own $PORT — the shell form below respects either.
 ENV PORT=7860
 EXPOSE 7860
 
