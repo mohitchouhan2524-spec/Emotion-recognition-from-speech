@@ -1,0 +1,21 @@
+# Local environment
+.venv/
+__pycache__/
+*.pyc
+
+# Raw dataset — large, and the model doesn't need it at inference time
+Audiodata/
+data/raw/
+
+# Cached features — regenerated locally, not needed for serving
+*.npy
+features.csv
+
+# Dev/version control noise
+.git/
+.gitignore
+tests/
+*.ipynb
+.pytest_cache/
+
+# Keep: src/, backend/, frontend/, checkpoints/, requirements.txt

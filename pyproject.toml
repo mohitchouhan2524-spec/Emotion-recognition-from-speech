@@ -1,0 +1,32 @@
+[project]
+name = "emotional-recognition-from-speech"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "audioread>=3.0.1",
+    "fastapi==0.115.0",
+    "ipykernel>=6.26",
+    "joblib>=1.3",
+    "jupyter>=1.0",
+    "librosa>=0.10.1",
+    "matplotlib>=3.8",
+    "numba>=0.58.0",
+    "numpy>=1.26,<2.0",
+    "pandas>=2.1",
+    "pydub==0.25.1",
+    "pytest>=7.4",
+    "python-multipart==0.0.9",
+    "scikit-learn>=1.3",
+    "scipy>=1.11",
+    "seaborn>=0.13",
+    "soundfile>=0.12.1",
+    "streamlit>=1.29",
+    "torch>=2.1",
+    "torchaudio>=2.1",
+    "tqdm>=4.66",
+    "transformers>=5.14.1",
+    "uvicorn[standard]==0.30.6",
+    "xgboost>=2.0",
+]

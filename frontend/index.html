@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listen — Voice Emotion Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #150f1c;
+    --bg-deep: #0e0a13;
+    --panel: #1e1729;
+    --panel-line: #322a3f;
+    --text: #f1ece6;
+    --text-muted: #9a8fae;
+    --idle: #7dd3c0;
+
+    --angry: #e8564a;
+    --calm: #6fc9b8;
+    --disgust: #8a9a4a;
+    --fearful: #9b7fd4;
+    --happy: #f0b23e;
+    --neutral: #8b93a8;
+    --sad: #5b8ac9;
+    --surprised: #e35ea0;
+
+    --accent: var(--idle);
+  }
+
+  * { box-sizing: border-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: radial-gradient(ellipse at 50% 0%, #201830 0%, var(--bg-deep) 70%);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* faint oscilloscope grid, ambient rather than decorative-generic */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--panel-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--panel-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px 60px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    color: var(--text-muted);
+    font-size: 15px;
+    max-width: 420px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* --- Orb --- */
+  .orb-stage {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 44px 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  canvas#orb {
+    width: 300px;
+    height: 300px;
+  }
+
+  .orb-core {
+    position: absolute;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 70%, white), var(--accent));
+    box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 55%, transparent);
+    transition: background 0.6s ease, box-shadow 0.6s ease;
+  }
+
+  .orb-core.pulsing {
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+
+  /* --- Status readout --- */
+  .status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    min-height: 20px;
+    margin-bottom: 26px;
+    transition: color 0.6s ease;
+  }
+
+  /* --- Record button --- */
+  .rec-btn {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    border: 2px solid var(--panel-line);
+    background: var(--panel);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.25s ease, transform 0.15s ease;
+  }
+
+  .rec-btn:hover:not(:disabled) { border-color: var(--accent); transform: scale(1.04); }
+  .rec-btn:active:not(:disabled) { transform: scale(0.97); }
+  .rec-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+  .rec-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .rec-dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: #e8564a;
+    transition: border-radius 0.25s ease;
+  }
+
+  .rec-btn.recording .rec-dot {
+    border-radius: 50%;
+    animation: dotpulse 1s ease-in-out infinite;
+  }
+
+  @keyframes dotpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .countdown {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 14px;
+    height: 16px;
+  }
+
+  /* --- Results panel --- */
+  .results {
+    width: 100%;
+    max-width: 420px;
+    margin-top: 40px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+
+  .results.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .result-headline {
+    text-align: center;
+    margin-bottom: 22px;
+  }
+
+  .result-label {
+    font-size: 26px;
+    font-weight: 700;
+    text-transform: capitalize;
+    color: var(--accent);
+    transition: color 0.6s ease;
+  }
+
+  .result-conf {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 74px 1fr 42px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .bar-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .bar-track {
+    height: 6px;
+    background: var(--bg-deep);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .bar-pct {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  .error-msg {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--angry);
+    text-align: center;
+    max-width: 360px;
+    margin-top: 18px;
+    line-height: 1.5;
+    display: none;
+  }
+
+  footer {
+    margin-top: 48px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Voice Emotion Reader</div>
+      <h1>Say something.</h1>
+      <p class="sub">Five seconds is enough. Press record, speak naturally, and let go of the button — the reading happens on its own.</p>
+    </header>
+
+    <div class="orb-stage">
+      <canvas id="orb" width="300" height="300"></canvas>
+      <div class="orb-core" id="orbCore"></div>
+    </div>
+
+    <div class="status" id="status">Ready to listen</div>
+
+    <button class="rec-btn" id="recBtn" aria-label="Start 5 second recording">
+      <div class="rec-dot"></div>
+    </button>
+    <div class="countdown" id="countdown"></div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="results" id="results">
+      <div class="result-headline">
+        <div class="result-label" id="resultLabel">—</div>
+        <div class="result-conf" id="resultConf"></div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <footer>No audio is stored. Each reading is analyzed once, then discarded.</footer>
+  </div>
+
+<script>
+const API_URL = "/predict";
+const RECORD_SECONDS = 5;
+
+const EMOTION_COLORS = {
+  angry: "#e8564a", calm: "#6fc9b8", disgust: "#8a9a4a", fearful: "#9b7fd4",
+  happy: "#f0b23e", neutral: "#8b93a8", sad: "#5b8ac9", surprised: "#e35ea0",
+};
+
+const recBtn = document.getElementById("recBtn");
+const statusEl = document.getElementById("status");
+const countdownEl = document.getElementById("countdown");
+const orbCore = document.getElementById("orbCore");
+const orbCanvas = document.getElementById("orb");
+const orbCtx = orbCanvas.getContext("2d");
+const resultsEl = document.getElementById("results");
+const resultLabelEl = document.getElementById("resultLabel");
+const resultConfEl = document.getElementById("resultConf");
+const barsEl = document.getElementById("bars");
+const errorMsgEl = document.getElementById("errorMsg");
+
+let audioCtx, analyser, dataArray, sourceNode, rafId;
+let mediaRecorder, chunks = [];
+
+function setAccent(color) {
+  document.documentElement.style.setProperty("--accent", color);
+}
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function showError(msg) {
+  errorMsgEl.textContent = msg;
+  errorMsgEl.style.display = "block";
+}
+
+function clearError() {
+  errorMsgEl.style.display = "none";
+}
+
+// --- Radial waveform drawing (idle ring when not recording, live when recording) ---
+function drawIdleRing() {
+  const w = orbCanvas.width, h = orbCanvas.height;
+  orbCtx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, baseR = 70;
+  orbCtx.strokeStyle = "rgba(125,211,192,0.25)";
+  orbCtx.lineWidth = 1.5;
+  orbCtx.beginPath();
+  orbCtx.arc(cx, cy, baseR, 0, Math.PI * 2);
+  orbCtx.stroke();
+}
+
+function drawLiveWaveform() {
+  if (!analyser) return;
+  analyser.getByteFrequencyData(dataArray);
+
+  const w = orbCanvas.width, h = orbCanvas.height;
+  const cx = w / 2, cy = h / 2;
+  const baseR = 70;
+  const bars = 64;
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+
+  orbCtx.clearRect(0, 0, w, h);
+  orbCtx.strokeStyle = accent;
+  orbCtx.lineWidth = 2;
+
+  for (let i = 0; i < bars; i++) {
+    const idx = Math.floor((i / bars) * dataArray.length);
+    const amp = dataArray[idx] / 255;
+    const len = 8 + amp * 55;
+    const angle = (i / bars) * Math.PI * 2;
+
+    const x1 = cx + Math.cos(angle) * baseR;
+    const y1 = cy + Math.sin(angle) * baseR;
+    const x2 = cx + Math.cos(angle) * (baseR + len);
+    const y2 = cy + Math.sin(angle) * (baseR + len);
+
+    orbCtx.globalAlpha = 0.35 + amp * 0.65;
+    orbCtx.beginPath();
+    orbCtx.moveTo(x1, y1);
+    orbCtx.lineTo(x2, y2);
+    orbCtx.stroke();
+  }
+  orbCtx.globalAlpha = 1;
+
+  rafId = requestAnimationFrame(drawLiveWaveform);
+}
+
+drawIdleRing();
+
+async function startRecording() {
+  clearError();
+  resultsEl.classList.remove("show");
+  recBtn.disabled = true;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    sourceNode.connect(analyser);
+
+    chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      cancelAnimationFrame(rafId);
+      handleRecordedAudio(new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" }));
+    };
+
+    mediaRecorder.start();
+    recBtn.classList.add("recording");
+    orbCore.classList.add("pulsing");
+    setAccent(EMOTION_COLORS.calm);
+    setStatus("Listening…");
+    drawLiveWaveform();
+
+    let remaining = RECORD_SECONDS;
+    countdownEl.textContent = `${remaining}s`;
+    const tick = setInterval(() => {
+      remaining -= 1;
+      countdownEl.textContent = remaining > 0 ? `${remaining}s` : "";
+      if (remaining <= 0) {
+        clearInterval(tick);
+        mediaRecorder.stop();
+        recBtn.classList.remove("recording");
+        orbCore.classList.remove("pulsing");
+        setStatus("Analyzing…");
+      }
+    }, 1000);
+
+  } catch (err) {
+    recBtn.disabled = false;
+    setStatus("Ready to listen");
+    if (err.name === "NotAllowedError") {
+      showError("Microphone access was denied. Allow microphone access in your browser to use this.");
+    } else {
+      showError(`Could not access microphone: ${err.message}`);
+    }
+  }
+}
+
+async function handleRecordedAudio(blob) {
+  try {
+    const formData = new FormData();
+    formData.append("audio", blob, "clip.webm");
+
+    const res = await fetch(API_URL, { method: "POST", body: formData });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || `Server returned ${res.status}`);
+    }
+
+    const data = await res.json();
+    renderResult(data);
+  } catch (err) {
+    setStatus("Ready to listen");
+    setAccent(EMOTION_COLORS.neutral === undefined ? "#7dd3c0" : "#7dd3c0");
+    showError(`Reading failed: ${err.message}. Is the backend running on localhost:8000?`);
+  } finally {
+    recBtn.disabled = false;
+    countdownEl.textContent = "";
+    drawIdleRing();
+  }
+}
+
+function renderResult(data) {
+  const { emotion, confidence, probabilities } = data;
+  const color = EMOTION_COLORS[emotion] || "#7dd3c0";
+
+  setAccent(color);
+  setStatus("Reading complete");
+
+  resultLabelEl.textContent = emotion;
+  resultConfEl.textContent = `${Math.round(confidence * 100)}% confidence`;
+
+  const sorted = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
+  barsEl.innerHTML = "";
+  for (const [label, prob] of sorted) {
+    const pct = Math.round(prob * 100);
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML = `
+      <div class="bar-name">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="background:${EMOTION_COLORS[label] || "#7dd3c0"}"></div></div>
+      <div class="bar-pct">${pct}%</div>
+    `;
+    barsEl.appendChild(row);
+  }
+  resultsEl.classList.add("show");
+
+  // animate bar widths after insertion
+  requestAnimationFrame(() => {
+    barsEl.querySelectorAll(".bar-fill").forEach((el, i) => {
+      el.style.width = `${Math.round(sorted[i][1] * 100)}%`;
+    });
+  });
+}
+
+recBtn.addEventListener("click", () => {
+  if (!recBtn.classList.contains("recording")) startRecording();
+});
+</script>
+</body>
+</html>
