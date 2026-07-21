@@ -65,6 +65,7 @@ To deploy your own copy:
 
 The free tier sleeps after 15 minutes with no traffic. The first request after that takes 30-60 seconds while the instance wakes up and reloads the model — that's expected, not a bug.
 
+# Website link:https://emotion-recognition-from-speech-5fd9.onrender.com/
 ## Notes
 
 `Audiodata/` (the raw dataset) and `features.npy` (cached feature arrays) are not committed to git. Both are regenerated locally by `feature_extraction.py`, and together they'd add several GB to the repo. The trained checkpoint is small enough to commit directly, so no Git LFS is needed.
